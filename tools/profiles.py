@@ -22,7 +22,7 @@ class Profile:
     jsearch_queries: list[str]
     remoteok_tags: list[str]
     remotive_categories: list[str]
-    exclude: set[str] = field(default_factory=lambda: {"intern", "staz", "praktykant", "junior"})
+    exclude: set[str] = field(default_factory=lambda: {"intern", "staz", "praktykant"})  # "junior" allowed since 2026-11-10
     use_pracuj: bool = False        # pracujwit.pl RSS is a testing-only category feed
     regional_where: list[str] = field(default_factory=list)    # cities searched on Adzuna PL (on-site / hybrid roles near home)
     regional_queries: list[str] = field(default_factory=list)  # what to search for in those cities
@@ -46,21 +46,35 @@ QA = Profile(
         "qa", "quality assurance", "test automation", "playwright", "sdet",
         "tester", "qa engineer", "test engineer", "automated testing",
         "selenium", "cypress", "automation engineer", "quality engineer",
+        # manual testing roles (2026-11-12)
+        "manual tester", "manual qa", "software tester", "qa tester", "test analyst", "qa specialist",
+        "tester manualny", "tester oprogramowania", "testerka", "specjalista ds. testów", "analityk testów",
     ],
     adzuna_queries=[
         "QA automation remote",
-        "test automation engineer remote",
-        "SDET remote",
         "Playwright QA remote",
+        "manual tester remote",
+        "software tester remote",
+        "tester manualny zdalnie",
+        "tester oprogramowania zdalnie",
     ],
+    # JSearch defaults to the US; "@pl" = search in Poland (country parameter). 200 requests/month for all profiles.
     jsearch_queries=[
         "QA automation engineer remote",
-        "SDET Playwright TypeScript remote",
-        "quality assurance test automation UNDP UNICEF ILO WHO remote",
+        "software tester remote@pl",
+        "QA engineer Playwright remote@pl",
     ],
     remoteok_tags=["qa-engineer", "testing", "sdet"],
     remotive_categories=["qa", "testing", "software-dev"],
     use_pracuj=True,
+    # hybrid / on-site testing jobs in the owner's region (2026-11-12), as in the Implementation profile
+    regional_where=["Koszalin", "Szczecin", "Gdańsk", "Poznań"],
+    regional_queries=["tester", "tester oprogramowania", "QA"],
+    regional_cities=["koszalin", "szczecin", "gdańsk", "gdynia", "sopot", "trójmiasto", "poznań", "kołobrzeg"],
+    # senior automation roles are a barrier for the owner; unreadable US pages let them through (2026-11-12)
+    exclude={"intern", "staz", "praktykant", "senior", "sr.", "sr ", "lead", "principal", "staff ", "architect",
+             "head of", "manager", "director", "expert",
+             "monter", "montaż", "elektryk", "produkcj"},  # factory "assembler / tester" jobs from the city searches
 )
 
 # Implementation / consulting / AI-automation roles that fit: no-code platform logic,
@@ -74,8 +88,7 @@ CONSULTING = Profile(
         "technical consultant", "functional consultant", "business analyst", "systems analyst",
         "customer success engineer", "technical account manager", "technical trainer",
         "forward deployed engineer", "integration specialist", "integration engineer",
-        "low-code", "low code", "no-code", "no code",
-        "power platform", "power apps", "power automate", "mendix", "outsystems", "ferryt", "citizen developer",
+        # low-code / no-code titles are handled by a separate daily low-code watcher (not in this repository)
         "ai automation", "automation specialist", "automation consultant",
         "process automation", "workflow automation", "ai consultant", "ai solutions",
         "ai operations", "ai implementation", "prompt engineer", "ai enablement",
@@ -97,12 +110,14 @@ CONSULTING = Profile(
     ],
     remoteok_tags=["consulting", "automation", "customer-success", "ai"],
     remotive_categories=["customer-support", "product", "business", "all-others"],
-    exclude={"intern", "staz", "praktykant", "junior", "sales", "account executive", "recruiter",
+    exclude={"intern", "staz", "praktykant", "sales", "account executive", "recruiter",
              "test automation", "qa automation", "qa engineer", "tester", "test engineer",
              "quality assurance", "sdet", "qa ",
-             # very high seniority only; "senior" is NOT excluded (the owner confirmed senior BA offers,
-             # 2026-10-25) — years of experience are judged from the description instead
-             "principal", "lead", "expert", "architect", "head of", "manager", "director"},
+             # very high seniority; senior BA titles are excluded too (the owner, 2026-11-10: BA at mid level only).
+             # Other "senior" titles stay: years of experience are judged from the description instead.
+             "principal", "lead", "expert", "architect", "head of", "manager", "director",
+             "senior business", "sr business", "sr. business", "senior it business", "senior systems analyst",
+             "senior analyst", "starszy analityk"},
 )
 
 # Software implementation / onboarding / training roles: knows the system, configures it for the client, trains
@@ -136,11 +151,11 @@ IMPLEMENTATION = Profile(
     ],
     remoteok_tags=["customer-success", "support", "consulting", "training"],
     remotive_categories=["customer-support", "all-others", "product"],
-    # Owner's choice: remote PLUS hybrid / on-site in the region (Koszalin, Szczecin, Tricity, Poznań)
+    # the owner's choice (2026-10-25): remote PLUS hybrid / on-site in the region (Koszalin, Szczecin, Tricity, Poznań)
     regional_where=["Koszalin", "Szczecin", "Gdańsk", "Poznań"],
     regional_queries=["wdrożeniowiec", "specjalista ds. wdrożeń", "konsultant ds. wdrożeń", "konsultant wdrożeniowy"],
     regional_cities=["koszalin", "szczecin", "gdańsk", "gdynia", "sopot", "trójmiasto", "poznań", "kołobrzeg"],
-    exclude={"intern", "staz", "praktykant", "junior", "sales", "account executive", "recruiter",
+    exclude={"intern", "staz", "praktykant", "sales", "account executive", "recruiter",
              "principal", "lead", "expert", "architect", "head of", "manager", "director",
              "test automation", "qa automation", "qa engineer", "tester", "sdet"},
 )

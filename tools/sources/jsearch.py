@@ -1,13 +1,18 @@
 """JSearch source via RapidAPI — covers LinkedIn, Indeed, Glassdoor, ZipRecruiter.
 Free tier: 200 requests/month. Uses 2 queries per run = ~8 runs/month budget."""
 
+import json
 import os
 import requests
 from datetime import date
+from pathlib import Path
 
 from tools.profiles import QA, Profile
 
 API_URL = "https://jsearch.p.rapidapi.com/search"
+# RapidAPI reports the requests left in each response; below this reserve JSearch is skipped until next month
+QUOTA_FILE = Path(__file__).resolve().parents[2] / "jsearch-quota.json"
+QUOTA_RESERVE = 15
 
 # Spam aggregator domains that appear as fake "employers" on Indeed
 SPAM_EMPLOYER_PATTERNS = {
@@ -33,6 +38,10 @@ def fetch(profile: Profile = QA) -> list[dict]:
     today = date.today().isoformat()
 
     for query in profile.jsearch_queries:
+        remaining = _remaining()
+        if remaining is not None and remaining < QUOTA_RESERVE:
+            print(f"[JSearch] Only {remaining} requests left this month — skipping JSearch until the quota resets")
+            break
         try:
             jobs = _search(query, headers)
         except Exception as e:
@@ -82,15 +91,34 @@ def fetch(profile: Profile = QA) -> list[dict]:
     return results
 
 
+def _remaining():
+    """Requests left this month, as last reported by RapidAPI (None if never seen this month)."""
+    try:
+        data = json.loads(QUOTA_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if data.get("month") != date.today().strftime("%Y-%m"):
+        return None  # new month: the quota has reset
+    return data.get("remaining")
+
+
 def _search(query: str, headers: dict) -> list[dict]:
+    # "query@pl" searches in Poland (JSearch defaults to the US)
+    query, _, country = query.partition("@")
     params = {
         "query": query,
         "page": "1",
-        "num_pages": "2",
+        "num_pages": "1",  # one page per query saves the 200/month quota (2026-11-12)
         "date_posted": "week",
         "work_from_home": "true",
     }
+    if country:
+        params["country"] = country
     resp = requests.get(API_URL, headers=headers, params=params, timeout=30)
+    left = resp.headers.get("x-ratelimit-requests-remaining")
+    if left is not None and left.isdigit():
+        QUOTA_FILE.write_text(json.dumps({"month": date.today().strftime("%Y-%m"), "remaining": int(left),
+                                          "limit": resp.headers.get("x-ratelimit-requests-limit")}), encoding="utf-8")
     resp.raise_for_status()
     return resp.json().get("data", [])
 
