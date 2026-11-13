@@ -183,12 +183,17 @@ def archive_rows(sheet_name: str, row_numbers: list[int], archived_date: str) ->
                                    body={"values": [ARCHIVE_HEADER]}).execute()
 
     wanted = set(row_numbers)
-    values = sheets_api.values().get(spreadsheetId=spreadsheet_id, range=f"{sheet_name}!A1:G").execute().get("values", [])
+    values = sheets_api.values().get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!A1:N").execute().get("values", [])
     moved = []
     for number in sorted(wanted):
         if 2 <= number <= len(values):
-            row = values[number - 1] + [""] * (7 - len(values[number - 1]))
-            moved.append(row[:7] + [archived_date, sheet_name])
+            row = values[number - 1] + [""] * (14 - len(values[number - 1]))
+            if sheet_name == "low-code":  # Polish layout: map to the archive columns
+                # Title, Company, Salary, Source, URL, Found Date, Status
+                base = [row[4], row[0], "", row[12], row[5], row[11], row[6]]
+            else:
+                base = row[:7]
+            moved.append(base + [archived_date, sheet_name])
     if not moved:
         return 0
 
@@ -200,3 +205,50 @@ def archive_rows(sheet_name: str, row_numbers: list[int], archived_date: str) ->
                 for n in sorted(wanted, reverse=True) if 2 <= n <= len(values)]  # bottom to top keeps indexes valid
     sheets_api.batchUpdate(spreadsheetId=spreadsheet_id, body={"requests": requests}).execute()
     return len(moved)
+
+
+# ── Writing a status, a note or an assessment into one offer row (used by the MCP tools) ─────────
+# Column letters per tab. The portal tabs share one layout; the 'low-code' tab was built by hand
+# with Polish headers, so its note and assessment live in other columns.
+NOTE_HEADER = "Opis firmy i stanowiska (do rozmowy)"
+ASSESSMENT_HEADER = "Ocena dopasowania"
+LAYOUTS = {
+    "default": {"title": "A", "company": "B", "url": "E", "status": "G", "note": "I", "assessment": "J"},
+    "low-code": {"title": "E", "company": "A", "url": "F", "status": "G", "note": "K", "assessment": "N"},
+}
+
+
+def layout(sheet_name: str) -> dict:
+    return LAYOUTS.get(sheet_name, LAYOUTS["default"])
+
+
+def _cell(service, spreadsheet_id: str, sheet_name: str, ref: str) -> str:
+    v = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!{ref}").execute()
+    return (v.get("values") or [[""]])[0][0] if v.get("values") and v["values"][0] else ""
+
+
+def read_offer(sheet_name: str, row: int) -> dict:
+    """Title, company, link, status, note and assessment of one row (empty strings where blank)."""
+    service, spreadsheet_id = _get_service()
+    cols = layout(sheet_name)
+    # one read for the whole row (Google allows 60 reads per minute)
+    got = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'!A{row}:N{row}").execute().get("values", [[]])
+    cells = (got[0] if got else []) + [""] * 14
+    return {key: cells[ord(col) - ord("A")] for key, col in cols.items()}
+
+
+def write_cells(sheet_name: str, row: int, values: dict) -> None:
+    """Write values into one row. `values` maps a layout key ('status', 'note', 'assessment') to text.
+    Adds the column header first if the tab does not have it yet."""
+    service, spreadsheet_id = _get_service()
+    cols = layout(sheet_name)
+    headers = {"note": NOTE_HEADER, "assessment": ASSESSMENT_HEADER}
+    data = []
+    for key, text in values.items():
+        col = cols[key]
+        if key in headers and not _cell(service, spreadsheet_id, sheet_name, f"{col}1"):
+            data.append({"range": f"'{sheet_name}'!{col}1", "values": [[headers[key]]]})
+        data.append({"range": f"'{sheet_name}'!{col}{row}", "values": [[text]]})
+    service.spreadsheets().values().batchUpdate(
+        spreadsheetId=spreadsheet_id, body={"valueInputOption": "RAW", "data": data}).execute()

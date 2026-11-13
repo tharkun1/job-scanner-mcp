@@ -225,3 +225,7 @@ maintain.log
 # Streamlit
 .streamlit/secrets.toml
 
+
+# Local state written by the scanner
+tools/link-cache.json
+jsearch-quota.json

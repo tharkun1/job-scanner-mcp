@@ -69,6 +69,10 @@ SOURCES = [
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry_run = "--dry-run" in sys.argv
+    if "--no-jsearch" in sys.argv:  # JSearch only on Mondays in the scheduled scan (the owner, 2026-11-12: 200 requests/month)
+        global SOURCES
+        SOURCES = [s for s in SOURCES if "JSearch" not in s[0]]
+        print("JSearch skipped in this run (--no-jsearch).")
     profiles = [p for p in PROFILES if not args or p.name.lower() in {a.lower() for a in args}]
     if not profiles:
         print(f"Unknown profile {args}. Available: {[p.name for p in PROFILES]}")
@@ -92,10 +96,15 @@ def run_profile(profile, dry_run: bool):
         except Exception as e:
             print(f"ERROR: Could not connect to Google Sheets: {e}")
             print("Check GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, GOOGLE_SPREADSHEET_ID in .env")
-            sys.exit(1)
+            raise RuntimeError(f"Could not connect to Google Sheets: {e}") from e
 
         existing_urls = sheets.get_existing_urls(profile.sheet)
         print(f"Found {len(existing_urls)} existing jobs in sheet.\n")
+        # offers already moved to the archive (expired or old) must not come back (2026-11-12)
+        try:
+            existing_urls |= sheets.get_existing_urls(sheets.ARCHIVE_SHEET)
+        except Exception as e:
+            print(f"Could not read the archive tab: {e}")
 
     all_new_jobs: list[dict] = []
 
@@ -130,6 +139,7 @@ def run_profile(profile, dry_run: bool):
         print("No new jobs this run — sheet is up to date.")
 
     print("\nDone.")
+    return all_new_jobs
 
 
 def _print_summary(jobs: list[dict]):

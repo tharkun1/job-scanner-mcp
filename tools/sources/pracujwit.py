@@ -13,7 +13,7 @@ QA_KEYWORDS = {
     "selenium", "cypress", "automation engineer",
 }
 
-EXCLUDE_KEYWORDS = {"intern", "staz", "praktykant", "junior"}
+EXCLUDE_KEYWORDS = {"intern", "staz", "praktykant"}  # "junior" allowed since 2026-11-10
 
 REMOTE_KEYWORDS = {"remote", "zdaln", "home office", "praca zdalna"}
 
@@ -43,8 +43,8 @@ def fetch(profile: Profile = QA) -> list[dict]:
         if not any(kw in title_lower for kw in QA_KEYWORDS):
             continue
 
-        # Exclude junior/intern
-        if any(kw in title_lower for kw in EXCLUDE_KEYWORDS):
+        # Exclude interns, and the profile's own exclusions (senior/lead roles, 2026-11-12)
+        if any(kw in title_lower for kw in EXCLUDE_KEYWORDS) or profile.excluded(title):
             continue
 
         # Must mention remote somewhere in title or summary
