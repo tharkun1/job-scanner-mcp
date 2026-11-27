@@ -104,8 +104,8 @@ def list_new_jobs(
             "url": r.get("URL", ""),
             "found_date": r.get("Found Date", ""),
             "status": r.get("Status", ""),
-            # We Work Remotely asks job seekers for a paid subscription before applying (seen 2026-11-12)
-            "paid_apply": "weworkremotely.com" in r.get("URL", ""),
+            # We Work Remotely and jobleads ask job seekers to pay before applying (seen 2026-11-12/13)
+            "paid_apply": any(s in r.get("URL", "") for s in ("weworkremotely.com", "jobleads.com")),
         }
         for r in newest_first
     ]
@@ -267,7 +267,7 @@ def scan_jobs(profile: str, dry_run: bool = False) -> dict:
         return {"ok": False, "profile": chosen.name, "note": str(e), "log": _scan_log(buffer.getvalue())}
     if dry_run:
         # The scanner's dry run does not read the sheet; drop offers that are already there (read-only).
-        existing = sheets.get_existing_urls(chosen.sheet) | sheets.get_existing_urls(sheets.ARCHIVE_SHEET)
+        existing = sheets.get_existing_urls(chosen.sheet) | sheets.get_existing_urls(sheets.ARCHIVE_SHEET, url_only=True)
         new_jobs = [j for j in new_jobs
                     if not (sheets.offer_keys(j.get("url", ""), j.get("title", ""), j.get("company", "")) & existing)]
     return {

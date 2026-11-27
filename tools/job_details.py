@@ -119,6 +119,10 @@ def _nofluff(url: str) -> str:
 def fetch_details(url: str) -> dict:
     if not re.match(r"^https?://", url or ""):
         return {"ok": False, "method": None, "text": "", "note": "Not an http(s) URL."}
+    # never fetched automatically (the owner's rules): pracuj.pl, LinkedIn (2026-11-26), astek.pl (Cloudflare bot check)
+    if re.search(r"//(www\.)?(pracuj\.pl|linkedin\.com|astek\.pl)/", url.lower()):
+        return {"ok": False, "method": None, "text": "",
+                "note": "This site is never fetched automatically: open the link in the browser and paste the description."}
 
     try:
         text = _nofluff(url)

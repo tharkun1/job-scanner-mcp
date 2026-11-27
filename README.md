@@ -28,8 +28,12 @@ Job boards produce long lists. Reading every posting to check requirements and w
 
 ## How it works
 
-- `tools/fetch_jobs.py` fetches offers for each search profile from NoFluffJobs, Adzuna, JSearch (RapidAPI), RemoteOK, We Work Remotely and Remotive, removes duplicates already in the sheet and appends new rows.
-- Search profiles (keywords, queries, exclusions) are defined in `tools/profiles.py`.
+- `tools/fetch_jobs.py` fetches offers for each search profile from NoFluffJobs, Adzuna, JSearch (RapidAPI), RemoteOK, We Work Remotely, Remotive, SOLID.Jobs, RocketJobs.pl, Praca.pl, Impactpool and ReliefWeb (international development), and the career pages of selected companies; it removes duplicates already in the sheet and appends new rows. Another profile file and sheet can be passed with `--profiles` and `--sheet-id`.
+- Search profiles (keywords, queries, exclusions, home-region cities, which sources to skip) are defined in `tools/profiles.py`. An exclusion can be lifted by another word in the title (for example "senior" is excluded, but "Senior Manual Tester" passes).
+- `tools/pracuj_mail_import.py` and `tools/linkedin_mail_import.py` read the owner's own job-alert e-mails over IMAP (read-only) instead of scraping sites that block scripts.
+- `tools/lowcode_watch.py` watches low-code platform vendors and partners daily and writes to its own tab.
+- `tools/poranny_przeglad.py` runs a morning review: new offers are read and sorted into TAK / MOZE / SPRAWDZ / NIE by Claude (`claude -p`) from a private prompt file that is not part of this repository; it never changes the sheet or applies.
+- `tools/active_machine.py` makes sure only one of two computers runs the scheduled tasks (the active one is named in the sheet).
 - `tools/sheets.py` talks to the Google Sheets API with a service account.
 - `tools/job_details.py` reads a posting's text (structured data first, then the page text).
 - `tools/linkcheck.py` checks offer links live (expired, region-locked, years of experience), with a short cache.
@@ -78,10 +82,12 @@ claude mcp add --scope project job-scanner -- python mcp_server.py
 - Google Sheets allows 60 read requests per minute: read a whole row in one request, not cell by cell.
 - Many aggregator pages block automated access with anti-bot checks. The tools report such offers as "could not check" instead of guessing, and they are reviewed by hand.
 - The MCP server talks over standard output, so the scanner's progress messages must be captured, not printed.
+- Sites that block scripts (pracuj.pl, LinkedIn) are never scraped: their own e-mail alerts are the input, and the offers are read by a person.
+- Keyword lists in a second language need checking: Polish titles like "Specjalista ds. testowania" matched no English keyword and were silently dropped until the rejected titles were reviewed.
 
 ## Roadmap
 
-- Automatic assessment of new offers right after each scan.
+- Done: a first assessment of new offers every morning, right after the scan.
 - Scoring from the full description instead of the title alone.
 
 ## License

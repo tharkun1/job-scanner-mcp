@@ -86,8 +86,11 @@ def offer_keys(url: str, title: str, company: str) -> set[str]:
     return keys
 
 
-def get_existing_urls(sheet_name: str = DEFAULT_SHEET) -> set[str]:
-    """Return the identity keys (canonical URL and title|company) of every offer already in the sheet."""
+def get_existing_urls(sheet_name: str = DEFAULT_SHEET, url_only: bool = False) -> set[str]:
+    """Return the identity keys (canonical URL and title|company) of every offer already in the sheet.
+    url_only=True returns only the canonical URLs: used for the archive, because companies post new offers
+    under an old title (2026-11-19: a new remote Connectis "Manual Tester" was skipped as a copy of an
+    archived NoFluffJobs one)."""
     service, spreadsheet_id = _get_service()
     result = (
         service.spreadsheets()
@@ -98,7 +101,7 @@ def get_existing_urls(sheet_name: str = DEFAULT_SHEET) -> set[str]:
     keys: set[str] = set()
     for row in result.get("values", []):
         row = row + [""] * (5 - len(row))
-        keys |= offer_keys(row[4], row[0], row[1])
+        keys |= {canonical_url(row[4])} if url_only else offer_keys(row[4], row[0], row[1])
     return keys
 
 

@@ -12,6 +12,8 @@ BASE_URL = "https://api.adzuna.com/v1/api/jobs"
 COUNTRIES = [
     ("pl", "PLN"),
     ("gb", "GBP"),
+    ("de", "EUR"),  # EU remote roles in English (2026-11-13); German-only offers are hidden by the dashboard language check
+    ("nl", "EUR"),
     # ("us", "USD") removed 2026-10-25: Adzuna US ads say "not available in your region" from Poland
 ]
 
@@ -28,7 +30,8 @@ def fetch(profile: Profile = QA) -> list[dict]:
     results = []
     today = date.today().isoformat()
 
-    searches = [(q, c, cur, None) for q in profile.adzuna_queries for c, cur in COUNTRIES]
+    countries = [(c, cur) for c, cur in COUNTRIES if not profile.adzuna_countries or c in profile.adzuna_countries]
+    searches = [(q, c, cur, None) for q in profile.adzuna_queries for c, cur in countries]
     searches += [(q, "pl", "PLN", city) for q in profile.regional_queries for city in profile.regional_where]
     for query, country, currency, where in searches:
         if True:
@@ -64,6 +67,16 @@ def fetch(profile: Profile = QA) -> list[dict]:
                 if dedup_key in seen_jobs:
                     continue
 
+                location = (job.get("location") or {}).get("display_name", "")
+                if where and where in getattr(profile, "hybrid_cities", []):
+                    # outside the home region: skip offers whose snippet says purely on-site, label the rest for the owner's decision
+                    desc = (title + " " + job.get("description", "")).lower()
+                    onsite = any(w in desc for w in ("stacjonarn", "on-site", "onsite", "w biurze", "100% z biura", "office-based"))
+                    flexible = any(w in desc for w in ("hybryd", "hybrid", "zdaln", "remote"))
+                    if onsite and not flexible:
+                        continue
+                    location = f"{location} (poza regionem: hybryda/przyjazdy do decyzji)"
+
                 seen_urls.add(url)
                 seen_jobs.add(dedup_key)
                 salary = _format_salary(job, currency)
@@ -75,7 +88,7 @@ def fetch(profile: Profile = QA) -> list[dict]:
                     "source": "Adzuna",
                     "url": url,
                     "found_date": today,
-                    "location": (job.get("location") or {}).get("display_name", ""),
+                    "location": location,
                 })
 
     return results
