@@ -5,6 +5,8 @@ Usage:
     python tools/fetch_jobs.py                  # all profiles (QA + Consulting)
     python tools/fetch_jobs.py consulting      # one profile only
     python tools/fetch_jobs.py --dry-run       # fetch and print, write nothing
+    python tools/fetch_jobs.py --profiles="<folder>/profil.py" --sheet-id=<id>
+                                               # another person's profiles and Google Sheet (2026-11-15)
 
 Fetches jobs for each search profile (tools/profiles.py) from all sources, deduplicates
 against that profile's sheet tab, and appends only new jobs. Prints a summary to stdout.
@@ -42,6 +44,13 @@ from tools.sources import (
     remoteok,
     weworkremotely,
     remotive,
+    impactpool,
+    reliefweb,
+    solidjobs,
+    astek,
+    codilime,
+    rocketjobs,
+    pracapl,
 )
 
 
@@ -50,10 +59,19 @@ SOURCES = [
     ("JustJoin.it",         justjoinit.fetch),
     ("NoFluffJobs",         nofluffjobs.fetch),
     ("Pracuj.pl IT",        pracujwit.fetch),
+    ("SOLID.Jobs",          solidjobs.fetch),    # added 2026-11-18; robots.txt allows bots
+    ("Astek",               astek.fetch),        # added 2026-11-25: Astek offers from its public sitemap (referral possible)
+    ("CodiLime",            codilime.fetch),     # added 2026-11-26: Teamtailor JSON feed (referral possible)
+
+    # ── Polish general job boards (non-IT), only for profiles with use_pl_general_boards=True (2026-11-26) ──
+    ("RocketJobs",          rocketjobs.fetch),   # sitemap + offer pages; robots.txt allows both
+    ("Praca.pl",            pracapl.fetch),      # search result pages; robots.txt allows them (not pracuj.pl)
 
     # ── International organisations ───────────────────────────────────────────
     # UN RSS feeds decommissioned — UN orgs covered via JSearch (LinkedIn)
     ("UN/UNDP/ILO (RSS)",   undp.fetch),
+    ("Impactpool",          impactpool.fetch),   # UN / World Bank / EU / NGO, E-gov profile only
+    ("ReliefWeb",           reliefweb.fetch),    # E-gov profile only
 
     # ── Western remote-first boards (EU/US companies, EUR/USD pay) ───────────
     ("RemoteOK",            remoteok.fetch),
@@ -66,13 +84,37 @@ SOURCES = [
 ]
 
 
+def _option(name: str) -> str:
+    for a in sys.argv[1:]:
+        if a.startswith(f"--{name}="):
+            return a.split("=", 1)[1].strip('"')
+    return ""
+
+
+def _load_profiles(path: str) -> list:
+    """PROFILES from another person's profile file (their folder lives outside this project)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("other_profiles", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.PROFILES
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    global PROFILES
+    if _option("profiles"):
+        PROFILES = _load_profiles(_option("profiles"))
+    if _option("sheet-id"):  # write to another Google Sheet (shared with the scanner's service account)
+        os.environ["GOOGLE_SPREADSHEET_ID"] = _option("sheet-id")
     dry_run = "--dry-run" in sys.argv
+    global SOURCES
     if "--no-jsearch" in sys.argv:  # JSearch only on Mondays in the scheduled scan (the owner, 2026-11-12: 200 requests/month)
-        global SOURCES
         SOURCES = [s for s in SOURCES if "JSearch" not in s[0]]
         print("JSearch skipped in this run (--no-jsearch).")
+    if "--no-adzuna" in sys.argv:  # daily scan (2026-11-21): Adzuna (per-app quota) only on Mon/Thu, other sources every day
+        SOURCES = [s for s in SOURCES if s[0] != "Adzuna"]
+        print("Adzuna skipped in this run (--no-adzuna).")
     profiles = [p for p in PROFILES if not args or p.name.lower() in {a.lower() for a in args}]
     if not profiles:
         print(f"Unknown profile {args}. Available: {[p.name for p in PROFILES]}")
@@ -102,13 +144,15 @@ def run_profile(profile, dry_run: bool):
         print(f"Found {len(existing_urls)} existing jobs in sheet.\n")
         # offers already moved to the archive (expired or old) must not come back (2026-11-12)
         try:
-            existing_urls |= sheets.get_existing_urls(sheets.ARCHIVE_SHEET)
+            existing_urls |= sheets.get_existing_urls(sheets.ARCHIVE_SHEET, url_only=True)
         except Exception as e:
             print(f"Could not read the archive tab: {e}")
 
     all_new_jobs: list[dict] = []
 
     for name, fetch_fn in SOURCES:
+        if name in getattr(profile, "skip_sources", []):
+            continue
         print(f"Fetching from {name}...")
         try:
             jobs = fetch_fn(profile)
